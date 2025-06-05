@@ -39,7 +39,7 @@ public class OMOPMetadataClasses {
             File targetFile = new File(vocab_folder, config.filename);
             CSVChunkIterable iterable = new CSVChunkIterable(targetFile, 1000);
 
-            OWLClass c = dataFactory.getOWLClass(IRI.create(omop_iri + "#" + className));
+            OWLClass c = dataFactory.getOWLClass(IRI.create(omop_iri + className));
             OWLDeclarationAxiom da = dataFactory.getOWLDeclarationAxiom(c);
             ontology.add(da);
 

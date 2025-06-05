@@ -53,7 +53,13 @@ public class OMOPConcepts {
                 for (Map<String, String> row : chunk) {
                     if (target_vocabs.contains(row.get("vocabulary_id"))) {
 
-                        OWLClass concept = dataFactory.getOWLClass(IRI.create(omop_iri + row.get("concept_id")));
+                        OWLClass concept = dataFactory.getOWLClass(
+                                IRI.create(
+                                        omop_iri +
+                                        row.get("vocabulary_id").replace(" ", "_").toLowerCase() +
+                                        "_" + row.get("concept_id")
+                                )
+                        );
 
                         OWLClass voc = vv.get(row.get("vocabulary_id"));
                         OWLClass ccl = cc.get(row.get("concept_class_id"));

@@ -21,7 +21,7 @@ import java.util.stream.Stream;
 
 
 public class OWLLoader {
-    public static final IRI omop_iri = IRI.create("https://athena.ohdsi.org/search-terms/terms/");
+    public static final IRI omop_iri = IRI.create("https://athena.ohdsi.org/search-terms/terms/omop#");
     private OWLOntologyManager manager;
     private OWLDataFactory dataFactory;
     private OMOPMetadataClasses metadata;
