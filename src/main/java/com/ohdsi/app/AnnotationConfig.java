@@ -1,5 +1,4 @@
 package com.ohdsi.app;
-import org.semanticweb.owlapi.formats.PrefixDocumentFormat;
 
 import org.semanticweb.owlapi.model.*;
 
@@ -10,10 +9,10 @@ public class AnnotationConfig {
     public OWLAnnotationProperty annotation;
     public AnnotationConfig(String annotation_name, String annotation_source,
                             OWLDataFactory dataFactory, OWLOntology ontology,
-                            PrefixDocumentFormat pm, OWLOntologyManager manager) {
+                            IRI omop_iri, OWLOntologyManager manager) {
         this.annotation_name = annotation_name;
         this.annotation_source = annotation_source;
-        this.annotation = dataFactory.getOWLAnnotationProperty("omop:" + annotation_name, pm);
+        this.annotation = dataFactory.getOWLAnnotationProperty(omop_iri + annotation_name);
         manager.addAxiom(ontology, dataFactory.getOWLDeclarationAxiom(annotation));
     }
 }

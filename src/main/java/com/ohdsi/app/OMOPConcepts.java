@@ -14,45 +14,50 @@ public class OMOPConcepts {
     private final OWLDataFactory dataFactory;
     private final Map<String, AnnotationConfig> annotation_lookup;
     private final Map<String, PropertyConfig> property_lookup;
+    private final PrefixDocumentFormat pm;
+    private final IRI omop_iri;
 
     public OMOPConcepts(OWLOntology ontology, OWLDataFactory dataFactory, String vocab_folder,
-                        PrefixDocumentFormat pm, OWLOntologyManager manager, OMOPMetadataClasses metadata) {
-
+                        PrefixDocumentFormat pm, OWLOntologyManager manager, OMOPMetadataClasses metadata,
+                        IRI omop_iri) {
+        this.omop_iri = omop_iri;
         this.ontology = ontology;
         this.dataFactory = dataFactory;
         this.vocab_folder = vocab_folder;
         this.annotation_lookup = new LinkedHashMap<>();
         this.property_lookup = new LinkedHashMap<>();
+        this.pm = pm;
 
         Map<String, OWLClass> vv = metadata.getFamily("vocabulary");
         Map<String, OWLClass> cc = metadata.getFamily("concept_class");
         Map<String, OWLClass> dd = metadata.getFamily("domain");
 
-        property_lookup.put("domain", new PropertyConfig("in_domain", "domain_id", dataFactory, pm, ontology, manager, dd));
-        property_lookup.put("concept_class", new PropertyConfig("in_class", "concept_class_id", dataFactory, pm, ontology, manager, cc));
-        property_lookup.put("vocabulary", new PropertyConfig("in_vocabulary", "vocabulary_id", dataFactory, pm, ontology, manager, vv));
+        property_lookup.put("domain", new PropertyConfig("in_domain", "domain_id", dataFactory, omop_iri, ontology, manager, dd));
+        property_lookup.put("concept_class", new PropertyConfig("in_class", "concept_class_id", dataFactory, omop_iri, ontology, manager, cc));
+        property_lookup.put("vocabulary", new PropertyConfig("in_vocabulary", "vocabulary_id", dataFactory, omop_iri, ontology, manager, vv));
 
-        annotation_lookup.put("code", new AnnotationConfig("has_code", "concept_code", dataFactory, ontology, pm, manager));
-        annotation_lookup.put("invalid", new AnnotationConfig("invalid", "invalid", dataFactory, ontology, pm, manager));
-        annotation_lookup.put("standard", new AnnotationConfig("standard_concept", "standard_concept", dataFactory, ontology, pm, manager));
+        annotation_lookup.put("code", new AnnotationConfig("has_code", "concept_code", dataFactory, ontology, omop_iri, manager));
+        annotation_lookup.put("invalid", new AnnotationConfig("invalid", "invalid", dataFactory, ontology, omop_iri, manager));
+        annotation_lookup.put("standard", new AnnotationConfig("standard_concept", "standard_concept", dataFactory, ontology, omop_iri, manager));
     }
 
     public void load() throws IOException {
         System.out.println("Creating OWL classes for OMOP concepts");
 
-        int chunkSize = 1000;
+        int chunkSize = 5000;
         System.out.println("Reading CONCEPT.csv...");
         File conceptFile = new File(vocab_folder, "CONCEPT.csv");
         CSVChunkIterable iterable = new CSVChunkIterable(conceptFile, chunkSize);
         // this whole thing feels kind of brute force - divide and conquer on vocabs with some pre-processing?
-        List<String> target_vocabs = Arrays.asList("SNOMED", "HemOnc", "ICDO3", "Cancer Modifier");
+        //List<String> target_vocabs = Arrays.asList("SNOMED", "HemOnc", "ICDO3", "Cancer Modifier");
+        List<String> target_vocabs = Arrays.asList("Cancer Modifier");
 
         for (List<Map<String, String>> chunk : iterable) {
             if (!chunk.isEmpty()) {
                 for (Map<String, String> row : chunk) {
                     if (target_vocabs.contains(row.get("vocabulary_id"))) {
                         OWLClass concept = dataFactory.getOWLClass(
-                                "omop:" + row.get("concept_id") //row.get("vocabulary_id").replace(" ", "_").toLowerCase() + "_" +
+                                omop_iri + row.get("concept_id") //row.get("vocabulary_id").replace(" ", "_").toLowerCase() + "_" +
                         );
                         for (Map.Entry<String, AnnotationConfig> entry : annotation_lookup.entrySet()) {
                             AnnotationConfig annotator = entry.getValue();

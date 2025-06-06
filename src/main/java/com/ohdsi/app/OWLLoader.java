@@ -62,16 +62,16 @@ public class OWLLoader {
         // adding skos prefix so that we can use preferred label / alt label for synonyms
         // PrefixDocumentFormat prefixFormat = (PrefixDocumentFormat) format;
         format.setPrefix("skos", "http://www.w3.org/2004/02/skos/core#");
-        format.setPrefix("omop", "https://athena.ohdsi.org/search-terms/terms/omop#");
+        // format.setPrefix("omop", "https://athena.ohdsi.org/search-terms/terms/omop#");
         manager.setOntologyFormat(o, format);
 
-        this.metadata = new OMOPMetadataClasses(o, dataFactory, vocab_folder);
+        this.metadata = new OMOPMetadataClasses(o, dataFactory, vocab_folder, omop_iri);
         try {
             metadata.load();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        this.concepts = new OMOPConcepts(o, dataFactory, vocab_folder, format, manager, metadata);
+        this.concepts = new OMOPConcepts(o, dataFactory, vocab_folder, format, manager, metadata, omop_iri);
         this.ancestry = new OMOPAncestry(this.o, dataFactory, vocab_folder);
         this.synonyms = new OMOPSynonyms(this.o, dataFactory, vocab_folder, format);
         this.relationships = new OMOPRelationships(this.o, dataFactory, vocab_folder, format);

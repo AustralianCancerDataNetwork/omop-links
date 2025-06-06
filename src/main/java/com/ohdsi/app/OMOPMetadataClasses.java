@@ -12,15 +12,18 @@ public class OMOPMetadataClasses {
     private final OWLOntology ontology;
     private final OWLDataFactory dataFactory;
     private final Map<String, MetadataConfig> refLookup;
+    private final IRI omop_iri;
     // private final OWLOntologyManager manager;
 
     public OMOPMetadataClasses(OWLOntology ontology,
                                OWLDataFactory dataFactory,
-                               String vocab_folder){
+                               String vocab_folder,
+                               IRI omop_iri){
         this.ontology = ontology;
         this.dataFactory = dataFactory;
         this.vocab_folder = vocab_folder;
         this.refLookup = new LinkedHashMap<>();
+        this.omop_iri = omop_iri;
 
 //        nixed this in preference for adding the prefix in the main load script but leaving
 //        these definitions here (including manager instantiation...) if we decide to do
@@ -47,14 +50,14 @@ public class OMOPMetadataClasses {
             File targetFile = new File(vocab_folder, config.filename);
             CSVChunkIterable iterable = new CSVChunkIterable(targetFile, 1000);
 
-            OWLClass c = dataFactory.getOWLClass("omop:" + className);
+            OWLClass c = dataFactory.getOWLClass(omop_iri + className);
             OWLDeclarationAxiom da = dataFactory.getOWLDeclarationAxiom(c);
             ontology.add(da);
 
             for (List<Map<String, String>> chunk : iterable) {
                 if (!chunk.isEmpty()) {
                     for (Map<String, String> row : chunk) {
-                        OWLClass v = dataFactory.getOWLClass("omop:" + row.get(config.conceptIdColumn));
+                        OWLClass v = dataFactory.getOWLClass(omop_iri + row.get(config.conceptIdColumn));
                         ontology.add(dataFactory.getOWLSubClassOfAxiom(v, c));
                         OWLAnnotation lab = dataFactory.getOWLAnnotation(
                                 dataFactory.getRDFSLabel(),
