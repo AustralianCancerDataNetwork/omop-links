@@ -28,6 +28,9 @@ import org.semanticweb.owlapi.model.OWLOntology;
     5?  can we integrate this with semsql to make a single pipeline instead of managing multiple dependencies to produce the end-goal?
     6?  not super necessary but would be nice to refactor all the writer classes to a common base, as there's a lot of
         redundancy in passing all the object handles around...
+
+    for later context - to run:
+        - mvn compile exec:java -Dexec.mainClass="com.ohdsi.app.OWLLoader" -Dexec.args="-d [outdir] -f [outfile] -v [folder with athena files] -r"
 */
 public class OWLLoader {
     public static final IRI omop_iri = IRI.create("https://athena.ohdsi.org/search-terms/terms/omop#");

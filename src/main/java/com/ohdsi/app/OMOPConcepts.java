@@ -32,9 +32,9 @@ public class OMOPConcepts {
         property_lookup.put("concept_class", new PropertyConfig("in_class", "concept_class_id", dataFactory, pm, ontology, manager, cc));
         property_lookup.put("vocabulary", new PropertyConfig("in_vocabulary", "vocabulary_id", dataFactory, pm, ontology, manager, vv));
 
-        annotation_lookup.put("code", new AnnotationConfig("has_code", "concept_code", dataFactory, ontology, manager));
-        annotation_lookup.put("invalid", new AnnotationConfig("invalid", "invalid", dataFactory, ontology, manager));
-        annotation_lookup.put("standard", new AnnotationConfig("standard_concept", "standard_concept", dataFactory, ontology, manager));
+        annotation_lookup.put("code", new AnnotationConfig("has_code", "concept_code", dataFactory, ontology, pm, manager));
+        annotation_lookup.put("invalid", new AnnotationConfig("invalid", "invalid", dataFactory, ontology, pm, manager));
+        annotation_lookup.put("standard", new AnnotationConfig("standard_concept", "standard_concept", dataFactory, ontology, pm, manager));
     }
 
     public void load() throws IOException {
