@@ -1,9 +1,5 @@
 package com.ohdsi.app;
 
-import java.util.Map;
-import java.util.LinkedHashMap;
-import java.util.List;
-
 public class MetadataConfig {
     public String filename;
     public String conceptIdColumn;

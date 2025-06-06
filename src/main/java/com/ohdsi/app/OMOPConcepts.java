@@ -1,10 +1,6 @@
 package com.ohdsi.app;
-
 import org.semanticweb.owlapi.model.*;
-
-import org.apache.commons.cli.*;
-import org.apache.commons.csv.*;
-
+import org.semanticweb.owlapi.formats.PrefixDocumentFormat;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
@@ -13,85 +9,79 @@ import java.util.*;
 public class OMOPConcepts {
 
     private final Map<String, OWLClass> idToClass = new HashMap<>();
-    private String vocab_folder;
-    private OWLOntology ontology;
-    private OWLDataFactory dataFactory;
-    private OWLOntologyManager manager;
-    private IRI omop_iri;
+    private final String vocab_folder;
+    private final OWLOntology ontology;
+    private final OWLDataFactory dataFactory;
+    private final Map<String, AnnotationConfig> annotation_lookup;
+    private final Map<String, PropertyConfig> property_lookup;
 
-    public OMOPConcepts(OWLOntology ontology, OWLDataFactory dataFactory, String vocab_folder, OWLOntologyManager manager, IRI omop_iri) {
+    public OMOPConcepts(OWLOntology ontology, OWLDataFactory dataFactory, String vocab_folder,
+                        PrefixDocumentFormat pm, OWLOntologyManager manager, OMOPMetadataClasses metadata) {
+
         this.ontology = ontology;
         this.dataFactory = dataFactory;
         this.vocab_folder = vocab_folder;
-        this.manager = manager;
-        this.omop_iri = omop_iri;
+        this.annotation_lookup = new LinkedHashMap<>();
+        this.property_lookup = new LinkedHashMap<>();
+
+        Map<String, OWLClass> vv = metadata.getFamily("vocabulary");
+        Map<String, OWLClass> cc = metadata.getFamily("concept_class");
+        Map<String, OWLClass> dd = metadata.getFamily("domain");
+
+        property_lookup.put("domain", new PropertyConfig("in_domain", "domain_id", dataFactory, pm, ontology, manager, dd));
+        property_lookup.put("concept_class", new PropertyConfig("in_class", "concept_class_id", dataFactory, pm, ontology, manager, cc));
+        property_lookup.put("vocabulary", new PropertyConfig("in_vocabulary", "vocabulary_id", dataFactory, pm, ontology, manager, vv));
+
+        annotation_lookup.put("code", new AnnotationConfig("has_code", "concept_code", dataFactory, ontology, manager));
+        annotation_lookup.put("invalid", new AnnotationConfig("invalid", "invalid", dataFactory, ontology, manager));
+        annotation_lookup.put("standard", new AnnotationConfig("standard_concept", "standard_concept", dataFactory, ontology, manager));
     }
 
-    public void load(OMOPMetadataClasses metadata) throws IOException {
+    public void load() throws IOException {
         System.out.println("Creating OWL classes for OMOP concepts");
 
         int chunkSize = 1000;
         System.out.println("Reading CONCEPT.csv...");
         File conceptFile = new File(vocab_folder, "CONCEPT.csv");
         CSVChunkIterable iterable = new CSVChunkIterable(conceptFile, chunkSize);
-
-        OWLObjectProperty in_vocabulary = dataFactory.getOWLObjectProperty(omop_iri + "in_vocabulary");
-        OWLObjectProperty in_class = dataFactory.getOWLObjectProperty(omop_iri + "in_class");
-        OWLObjectProperty in_domain = dataFactory.getOWLObjectProperty(omop_iri + "in_domain");
-        OWLAnnotationProperty hasCode = dataFactory.getOWLAnnotationProperty(omop_iri + "has_code");
-
         // this whole thing feels kind of brute force - divide and conquer on vocabs with some pre-processing?
         List<String> target_vocabs = Arrays.asList("SNOMED", "HemOnc", "ICDO3", "Cancer Modifier");
-
-        // ok at least if we keep the metadata concepts in memory then the mappings by class become tractable...
-        Map<String, OWLClass> vv = metadata.getFamily("vocabulary");
-        Map<String, OWLClass> cc = metadata.getFamily("concept_class");
-        Map<String, OWLClass> dd = metadata.getFamily("domain");
 
         for (List<Map<String, String>> chunk : iterable) {
             if (!chunk.isEmpty()) {
                 for (Map<String, String> row : chunk) {
                     if (target_vocabs.contains(row.get("vocabulary_id"))) {
-
                         OWLClass concept = dataFactory.getOWLClass(
-                                IRI.create(
-                                        omop_iri +
-                                        row.get("vocabulary_id").replace(" ", "_").toLowerCase() +
-                                        "_" + row.get("concept_id")
-                                )
+                                "omop:" + row.get("concept_id") //row.get("vocabulary_id").replace(" ", "_").toLowerCase() + "_" +
                         );
-
-                        OWLClass voc = vv.get(row.get("vocabulary_id"));
-                        OWLClass ccl = cc.get(row.get("concept_class_id"));
-                        OWLClass dom = dd.get(row.get("domain_id"));
-
-                        OWLSubClassOfAxiom v_ax = dataFactory.getOWLSubClassOfAxiom(
-                                concept,
-                                dataFactory.getOWLObjectSomeValuesFrom(in_vocabulary, voc)
-                        );
-                        OWLSubClassOfAxiom c_ax = dataFactory.getOWLSubClassOfAxiom(
-                                concept,
-                                dataFactory.getOWLObjectSomeValuesFrom(in_class, ccl)
-                        );
-                        OWLSubClassOfAxiom d_ax = dataFactory.getOWLSubClassOfAxiom(
-                                concept,
-                                dataFactory.getOWLObjectSomeValuesFrom(in_domain, dom)
-                        );
-                        ontology.add(v_ax);
-                        ontology.add(c_ax);
-                        ontology.add(d_ax);
-                        OWLAnnotation lab = dataFactory.getOWLAnnotation(
+                        for (Map.Entry<String, AnnotationConfig> entry : annotation_lookup.entrySet()) {
+                            AnnotationConfig annotator = entry.getValue();
+                            String label = row.get(annotator.annotation_source);
+                            if (label != null && !label.trim().isEmpty()) {
+                                OWLAnnotationAssertionAxiom annotation_axiom = dataFactory.getOWLAnnotationAssertionAxiom(
+                                        annotator.annotation,
+                                        concept.getIRI(),
+                                        dataFactory.getOWLLiteral(label)
+                                );
+                                ontology.addAxiom(annotation_axiom);
+                            }
+                        }
+                        for (Map.Entry<String, PropertyConfig> entry : property_lookup.entrySet()) {
+                            PropertyConfig property = entry.getValue();
+                            String label = row.get(property.property_source);
+                            if (label != null && !label.trim().isEmpty()) {
+                                OWLClass prop = property.property_lookup.get(label);
+                                OWLClassExpression expression = dataFactory.getOWLObjectSomeValuesFrom(property.property, prop);
+                                OWLAxiom subclass_axiom = dataFactory.getOWLSubClassOfAxiom(concept, expression);
+                                ontology.addAxiom(subclass_axiom);
+                            }
+                        }
+                        OWLAnnotation label = dataFactory.getOWLAnnotation(
                                 dataFactory.getRDFSLabel(),
                                 dataFactory.getOWLLiteral(row.get("concept_name"), "en")
                         );
-                        OWLAnnotation code = dataFactory.getOWLAnnotation(
-                                hasCode,
-                                dataFactory.getOWLLiteral(row.get("concept_code"))
-                        );
-                        OWLAxiom lab_ax = dataFactory.getOWLAnnotationAssertionAxiom(concept.getIRI(), lab);
-                        OWLAxiom code_ax = dataFactory.getOWLAnnotationAssertionAxiom(concept.getIRI(), code);
-                        manager.applyChange(new AddAxiom(ontology, lab_ax));
-                        manager.applyChange(new AddAxiom(ontology, code_ax));
+                        OWLAxiom lab = dataFactory.getOWLAnnotationAssertionAxiom(concept.getIRI(), label);
+                        ontology.add(lab);
                         idToClass.put(row.get("concept_id"), concept);
                     }
                 }
