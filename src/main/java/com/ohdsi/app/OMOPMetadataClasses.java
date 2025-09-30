@@ -57,7 +57,7 @@ public class OMOPMetadataClasses {
             for (List<Map<String, String>> chunk : iterable) {
                 if (!chunk.isEmpty()) {
                     for (Map<String, String> row : chunk) {
-                        OWLClass v = dataFactory.getOWLClass(omop_iri + row.get(config.conceptIdColumn));
+                        OWLClass v = dataFactory.getOWLClass(omop_iri +  row.get(config.conceptIdColumn));
                         ontology.add(dataFactory.getOWLSubClassOfAxiom(v, c));
                         OWLAnnotation lab = dataFactory.getOWLAnnotation(
                                 dataFactory.getRDFSLabel(),

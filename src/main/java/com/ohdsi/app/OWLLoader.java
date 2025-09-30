@@ -24,6 +24,8 @@ import org.semanticweb.owlapi.model.OWLOntology;
     2.  create a separate ohdsi ontology that holds all metadata-relevant classes ('in_domain', 'has_class' etc.)
     3.  a) create separate omop_[vocab_id] ontology files referencing one per vocabulary, added as cmdline args
         b) this would also make the in_vocab property redundant so could clean that up
+        (ETA: confirmed that for proper semsql conversion downstream, it is not possible to condense to prefix at this point
+        in the build chain - this step is likely to be a hard requirement once more than a handful of vocabs in scope...)
     4.  optionally merge files post-hoc
     5?  can we integrate this with semsql to make a single pipeline instead of managing multiple dependencies to produce the end-goal?
     6?  not super necessary but would be nice to refactor all the writer classes to a common base, as there's a lot of
@@ -31,9 +33,14 @@ import org.semanticweb.owlapi.model.OWLOntology;
 
     for later context - to run:
         - mvn compile exec:java -Dexec.mainClass="com.ohdsi.app.OWLLoader" -Dexec.args="-d [outdir] -f [outfile] -v [folder with athena files] -r"
+    semsql to convert:
+        - cp [outfile] [semantic-sql/data]
+        - cd semantic-sql
+        - poetry env activate
+        - semsql make with_codes.db
 */
 public class OWLLoader {
-    public static final IRI omop_iri = IRI.create("https://athena.ohdsi.org/search-terms/terms/omop#");
+    public static final IRI omop_iri = IRI.create("https://athena.ohdsi.org/search-terms/terms/");
     private final OWLOntologyManager manager;
     private final OMOPMetadataClasses metadata;
     private final OMOPConcepts concepts;
@@ -62,7 +69,6 @@ public class OWLLoader {
         // adding skos prefix so that we can use preferred label / alt label for synonyms
         // PrefixDocumentFormat prefixFormat = (PrefixDocumentFormat) format;
         format.setPrefix("skos", "http://www.w3.org/2004/02/skos/core#");
-        // format.setPrefix("omop", "https://athena.ohdsi.org/search-terms/terms/omop#");
         manager.setOntologyFormat(o, format);
 
         this.metadata = new OMOPMetadataClasses(o, dataFactory, vocab_folder, omop_iri);
