@@ -33,7 +33,6 @@ public class OMOPRelationships {
         System.out.println("Reading CONCEPT_RELATIONSHIP.csv...");
         File conceptRelationshipFile = new File(vocab_folder, "CONCEPT_RELATIONSHIP.csv");
         CSVChunkIterable iterable = new CSVChunkIterable(conceptRelationshipFile, chunkSize);
-
         for (List<Map<String, String>> chunk : iterable) {
             if (!chunk.isEmpty()) {
                 for (Map<String, String> row : chunk) {
@@ -43,9 +42,9 @@ public class OMOPRelationships {
                         if (non_standard != null && standard != null) {
                             OWLAnnotation mapping = dataFactory.getOWLAnnotation(
                                     maps_to,
-                                    dataFactory.getOWLLiteral(non_standard.getIRI().toString())
+                                    IRI.create(standard.getIRI().toString())
                             );
-                            OWLAxiom map_ax = dataFactory.getOWLAnnotationAssertionAxiom(standard.getIRI(), mapping);
+                            OWLAxiom map_ax = dataFactory.getOWLAnnotationAssertionAxiom(non_standard.getIRI(), mapping);
                             ontology.add(map_ax);
                         }
                     }

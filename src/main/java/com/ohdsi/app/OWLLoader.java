@@ -11,21 +11,33 @@ import org.semanticweb.owlapi.formats.PrefixDocumentFormat;
 import org.apache.commons.cli.*;
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+
 import org.semanticweb.owlapi.model.IRI;
 import org.semanticweb.owlapi.model.OWLOntology;
 
 /*
-    todo: this is just a proof of concept. unless we change it to be backed by a database instead of csv files, it will be rapidly intractable for more than a handful of vocabs.
+    todo: this is just a proof of concept. unless we change it to be backed by a database instead of csv files,
+          it will be rapidly intractable for more than a handful of vocabs.
 
     suggested plan:
-    0?  review skos property classes to see if we are better off reusing some of them instead of the bespoke ones
-        defined in the property and annotation config files
-    1.  remove reference to csv files in favour for postgres version
+    0?  review skos and/or rdfs property classes to see if we are better off reusing some of them instead
+        of the bespoke ones defined in the property and annotation config files
+            - e.g. rdfs:domain could maybe be used for domain and rdfs:type for concept_class
+            - possible uses of container classes as well to help with grounding steps?
+    1.  remove reference to csv files in favour of postgres version
     2.  create a separate ohdsi ontology that holds all metadata-relevant classes ('in_domain', 'has_class' etc.)
     3.  a) create separate omop_[vocab_id] ontology files referencing one per vocabulary, added as cmdline args
         b) this would also make the in_vocab property redundant so could clean that up
-        (ETA: confirmed that for proper semsql conversion downstream, it is not possible to condense to prefix at this point
-        in the build chain - this step is likely to be a hard requirement once more than a handful of vocabs in scope...)
+        (ETA: figured out how to condense to prefix at this point now (see: semsql/builder/prefixes/prefixes.csv and
+        semsql/builder/prefixes/prefixes_local.csv), but still TBC if we want OMOP-specific prefixes or revert to public
+        ones if available?)
+        - the file split step is a hard requirement once more than a handful of vocabs in scope - maxing out at current
+          vocab list (7 vocabularies - could make bigger owl file currently ~2.8GB, but semSQL conversion approx 10GB and
+          crashes Java even with large dedicated resources)
     4.  optionally merge files post-hoc
     5?  can we integrate this with semsql to make a single pipeline instead of managing multiple dependencies to produce the end-goal?
     6?  not super necessary but would be nice to refactor all the writer classes to a common base, as there's a lot of
@@ -37,7 +49,7 @@ import org.semanticweb.owlapi.model.OWLOntology;
         - cp [outfile] [semantic-sql/data]
         - cd semantic-sql
         - poetry env activate
-        - semsql make with_codes.db
+        - semsql make with_codes.db (once larger: ROBOT_JAVA_ARGS='-Xmx24G' semsql make with_loinc_icd_rxnorm.db)
 */
 public class OWLLoader {
     public static final IRI omop_iri = IRI.create("https://athena.ohdsi.org/search-terms/terms/");
@@ -50,6 +62,7 @@ public class OWLLoader {
     private final IRI documentIRI;
     private final OWLOntology o;
     private final PrefixDocumentFormat format;
+    private final Map<String, IRI> vocabBaseIRIs = new HashMap<>();
 
     public OWLLoader(String outdir_path, String outfile_name, String vocab_folder) throws OWLOntologyCreationException {
         this.manager = OWLManager.createOWLOntologyManager();
@@ -67,8 +80,47 @@ public class OWLLoader {
         this.format = (PrefixDocumentFormat) manager.getOntologyFormat(o);
 
         // adding skos prefix so that we can use preferred label / alt label for synonyms
-        // PrefixDocumentFormat prefixFormat = (PrefixDocumentFormat) format;
+        assert format != null;
         format.setPrefix("skos", "http://www.w3.org/2004/02/skos/core#");
+
+        // **** usage notes ****
+        // concept_name is encoded as rdfs:label
+        //     <rdfs:label xml:lang="en">Pathological fracture in other disease, left hand</rdfs:label>
+        // synonyms end up as skos:altLabel
+        //     <skos:altLabel>synonym string</skos:altLabel>
+        // concept_code is skos:exactMatch with originating vocab prefix
+        //     <skos:exactMatch rdf:resource="http://purl.bioontology.org/ontology/ICD10CM/M84.642"/>
+        // maps to relationships also skos:exactMatch but now with omop prefix for concept_id
+        //     <skos:exactMatch rdf:resource="https://athena.ohdsi.org/search-terms/terms/4118017"/>
+        // ancestry is a direct rdfs:subClassOf
+        //     <rdfs:subClassOf rdf:resource="https://athena.ohdsi.org/search-terms/terms/19000637"/>
+        // where in_class, in_domain and in_vocabulary are instead subclassed with constraining properties
+        // <rdfs:subClassOf>
+        //     <owl:Restriction>
+        //         <owl:onProperty rdf:resource="https://athena.ohdsi.org/search-terms/terms/in_class"/>
+        //         <owl:someValuesFrom rdf:resource="https://athena.ohdsi.org/search-terms/terms/44819063"/>
+        //     </owl:Restriction>
+        // </rdfs:subClassOf>
+
+        // adding all the target vocabs as prefixes so that we can manage concept codes in their own specific vocabularies
+        List<String> target_vocabs = Arrays.asList("SNOMED", "HemOnc", "ICDO3", "Cancer Modifier", "NCIt", "LOINC", "ICD10CM", "RxNorm");
+        // todo: if we decide to make an omop per-vocab file structure, we may revert these and use prefixes like omop.loinc etc? tbd
+        Map<String, String> existing_iris = Map.ofEntries(
+                Map.entry("loinc", "https://loinc.org/"),
+                Map.entry("icd10cm", "http://purl.bioontology.org/ontology/ICD10CM/"),
+                Map.entry("ncit", "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#"),
+                Map.entry("rxnorm", "http://purl.bioontology.org/ontology/RXNORM/"),
+                Map.entry("snomed","http://snomed.info/id/")
+        );
+        for (String vocab : target_vocabs) {
+            String key = vocab.replace(" ", "_").toLowerCase();
+            String base = "http://www.example.org/" + key + "/";
+            if (existing_iris.containsKey(key)) {
+                base = existing_iris.get(key);
+            }
+            format.setPrefix(key, base);
+            vocabBaseIRIs.put(key, IRI.create(base));
+        }
         manager.setOntologyFormat(o, format);
 
         this.metadata = new OMOPMetadataClasses(o, dataFactory, vocab_folder, omop_iri);
@@ -77,15 +129,13 @@ public class OWLLoader {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        this.concepts = new OMOPConcepts(o, dataFactory, vocab_folder, format, manager, metadata, omop_iri);
+        this.concepts = new OMOPConcepts(o, dataFactory, vocab_folder, format, manager, metadata, omop_iri, vocabBaseIRIs, target_vocabs);
         this.ancestry = new OMOPAncestry(this.o, dataFactory, vocab_folder);
         this.synonyms = new OMOPSynonyms(this.o, dataFactory, vocab_folder, format);
         this.relationships = new OMOPRelationships(this.o, dataFactory, vocab_folder, format);
-
     }
 
     public OWLOntology createOHDSIOntology() throws OWLOntologyStorageException, OWLOntologyCreationException, IOException {
-
         System.out.println("Saving ontology to: " + documentIRI);
         concepts.load();
         ancestry.load(concepts);

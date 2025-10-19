@@ -17,16 +17,21 @@ public class OMOPConcepts {
     private final PrefixDocumentFormat pm;
     private final IRI omop_iri;
     private final OWLAnnotationProperty maps_to;
+    private Map<String, IRI> vocabBaseIRIs = new HashMap<>();
+    private final List<String> target_vocabs;
+
 
     public OMOPConcepts(OWLOntology ontology, OWLDataFactory dataFactory, String vocab_folder,
                         PrefixDocumentFormat pm, OWLOntologyManager manager, OMOPMetadataClasses metadata,
-                        IRI omop_iri) {
+                        IRI omop_iri, Map<String, IRI> vocabBaseIRIs, List<String> target_vocabs) {
         this.omop_iri = omop_iri;
         this.ontology = ontology;
         this.dataFactory = dataFactory;
         this.vocab_folder = vocab_folder;
+        this.target_vocabs = target_vocabs;
         this.annotation_lookup = new LinkedHashMap<>();
         this.property_lookup = new LinkedHashMap<>();
+        this.vocabBaseIRIs = vocabBaseIRIs;
 
         this.pm = pm;
         this.maps_to = dataFactory.getOWLAnnotationProperty("skos:exactMatch", this.pm);
@@ -39,12 +44,23 @@ public class OMOPConcepts {
         property_lookup.put("concept_class", new PropertyConfig("in_class", "concept_class_id", dataFactory, omop_iri, ontology, manager, cc));
         property_lookup.put("vocabulary", new PropertyConfig("in_vocabulary", "vocabulary_id", dataFactory, omop_iri, ontology, manager, vv));
 
-        // moving this to skos:exactMatch so that we can search by code+vocab easily not just concept id
-        // this should be done better if we can get curi forms for all included vocabs, but at least now it works for letting
-        // you get started with searching by vocab, code pairs...
-        // annotation_lookup.put("code", new AnnotationConfig("has_code", "concept_code", dataFactory, ontology, omop_iri, manager));
         annotation_lookup.put("invalid", new AnnotationConfig("invalid", "invalid", dataFactory, ontology, omop_iri, manager));
         annotation_lookup.put("standard", new AnnotationConfig("standard_concept", "standard_concept", dataFactory, ontology, omop_iri, manager));
+    }
+
+    private IRI safeVocabIRI(String vocabPrefix, String code) {
+        // Normalize vocab prefix
+        String vocab = vocabPrefix.replace(" ", "_").toLowerCase();
+        IRI vocab_iri = vocabBaseIRIs.get(vocab);
+        // Replace problematic characters in code
+        String safeCode = code
+                .replaceAll("[^A-Za-z0-9_.-]", "_")  // replace invalid URI chars with "_"
+                .replaceAll("_+", "_")                // collapse multiple underscores
+                .replaceAll("^_|_$", "");             // trim leading/trailing underscores
+
+        // Build the full IRI using fragment form
+        String iriString = vocab_iri + safeCode;
+        return IRI.create(iriString);
     }
 
     public void load() throws IOException {
@@ -54,10 +70,6 @@ public class OMOPConcepts {
         System.out.println("Reading CONCEPT.csv...");
         File conceptFile = new File(vocab_folder, "CONCEPT.csv");
         CSVChunkIterable iterable = new CSVChunkIterable(conceptFile, chunkSize);
-        // this whole thing feels kind of brute force - divide and conquer on vocabs with some pre-processing?
-        List<String> target_vocabs = Arrays.asList("SNOMED", "HemOnc", "ICDO3", "Cancer Modifier", "NCIt", "LOINC", "ICD10CM");
-        // List<String> target_vocabs = Arrays.asList("Cancer Modifier");
-        // List<String> target_vocabs = Arrays.asList("OMOP Genomic");
 
         for (List<Map<String, String>> chunk : iterable) {
             if (!chunk.isEmpty()) {
@@ -66,11 +78,14 @@ public class OMOPConcepts {
                         OWLClass concept = dataFactory.getOWLClass(
                                 omop_iri + row.get("concept_id") //row.get("vocabulary_id").replace(" ", "_").toLowerCase() + "_" +
                         );
-                        String v = row.get("vocabulary_id").replace(" ", "_").toLowerCase() + ":";
+                        String v = row.get("vocabulary_id").replace(" ", "_").toLowerCase();
                         String c = row.get("concept_code");
+                        IRI code = safeVocabIRI(v, c);
                         OWLAnnotation mapping = dataFactory.getOWLAnnotation(
                                 maps_to,
-                                dataFactory.getOWLLiteral(v + c)
+                                code
+                                //IRI.create(code.getIRI().toString())
+                                //dataFactory.getOWLLiteral(standard.getIRI().toString())
                         );
                         OWLAxiom map_ax = dataFactory.getOWLAnnotationAssertionAxiom(concept.getIRI(), mapping);
                         ontology.add(map_ax);
